@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Policy Translator Pro (v1)",
+  "version": "0.2.0",
+  "description": "Summarize, risk-score, cite, and save privacy policies to your dashboard.",
+  "action": {
+    "default_title": "Policy Translator Pro",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Policy Translator Pro</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Policy Translator Pro</h1>
+      <button id="analyzeBtn">Analyze this page</button>
+      <button id="saveBtn" class="secondary" disabled>Save analysis</button>
+      <button id="toggleCiteBtn" class="secondary" disabled>Toggle citations</button>
+      <div id="status"></div>
+      <div id="result" class="hidden">
+        <h2>Summary</h2>
+        <p id="summary"></p>
+        <div class="scorebox">
+          <div class="score"><span id="riskScore">-</span><small>/100</small></div>
+          <div class="label">Risk Score</div>
+        </div>
+        <h3>Highlights (flagged lines)</h3>
+        <ul id="highlights"></ul>
+        <h3>Recommended Actions</h3>
+        <ul id="actions"></ul>
+        <a id="openDashboard" href="#" target="_blank">Open Dashboard</a>
+      </div>
+      <div class="footer">
+        <label>Backend URL</label>
+        <input id="backendUrl" placeholder="http://localhost:8788" />
+        <small>Tip: run the provided Node server locally (default 8788).</small>
+      </div>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>

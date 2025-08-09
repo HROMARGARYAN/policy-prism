@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Policy Translator Pro — Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Policy Translator Pro</h1>
+    <nav>
+      <a href="#" id="navAnalyses" class="active">Analyses</a>
+      <a href="#" id="navBreach">Breach Watch</a><a href="#" id="navAudits">Provider Audits</a><a href="#" id="navLetters">Letters</a>
+    </nav>
+  </header>
+  <main>
+    <section id="auth">
+      <h2>Login</h2>
+      <form id="loginForm">
+        <input type="email" id="authEmail" placeholder="you@example.com" required>
+        <input type="password" id="authPassword" placeholder="Password (min 8)" required>
+        <button type="submit">Login</button>
+        <button type="button" id="registerBtn" class="secondary">Register</button>
+      </form>
+      <p class="hint">Your saved analyses are encrypted client-side using your password-derived key.</p>
+    </section>
+
+    <section id="analyses">
+      <h2>Saved Analyses</h2>
+      <div id="list"></div>
+    </section>
+    <section id="breach" class="hidden">
+      <h2>Breach Watch</h2>
+      <form id="addEmailForm">
+        <input type="email" id="emailInput" placeholder="you@example.com" required>
+        <button type="submit">Add Email</button>
+      </form>
+      <button id="checkBtn">Check Now</button>
+      <div id="breachResults"></div>
+      <p class="hint">Tip: Set <code>HIBP_API_KEY</code> in your server <code>.env</code> to enable real checks.</p>
+    </section>
+
+    <section id="audits" class="hidden">
+      <h2>Provider Audits</h2>
+      <p>Select a provider to view a privacy checklist with deep links.</p>
+      <div id="providers"></div>
+      <div id="checklist"></div>
+    </section>
+
+  
+    <section id="letters" class="hidden">
+      <h2>Data Request Letters</h2>
+      <form id="letterForm">
+        <label>Law</label>
+        <select id="law"><option value="ccpa">CCPA/CPRA</option><option value="gdpr">GDPR</option></select>
+        <label>Request</label>
+        <select id="request"><option value="delete">Delete</option><option value="access">Access</option><option value="optout">Opt-out (sale/sharing)</option></select>
+        <input type="text" id="fullName" placeholder="Your Full Name" required>
+        <input type="email" id="yourEmail" placeholder="Your Email" required>
+        <input type="text" id="address" placeholder="Your Address (optional)">
+        <input type="text" id="company" placeholder="Company/Website" required>
+        <button type="submit">Generate Letter</button>
+      </form>
+      <pre id="letterOut"></pre>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

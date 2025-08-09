@@ -1,0 +1,15 @@
+<svg width="200" height="40" viewBox="0 0 200 40" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(0,0)">
+    <polygon points="0,35 20,5 40,35" fill="url(#g)" />
+    <polygon points="20,5 40,35 25,35" fill="#2563EB" opacity="0.2"/>
+    <polygon points="20,5 0,35 15,35" fill="#F59E0B" opacity="0.2"/>
+  </g>
+  <text x="52" y="28" font-family="Manrope, Inter, Arial, sans-serif" font-weight="800" font-size="22" fill="#0B1220">Policy</text>
+  <text x="112" y="28" font-family="Manrope, Inter, Arial, sans-serif" font-weight="700" font-size="22" fill="#2563EB">Prism</text>
+</svg>

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Policy Prism — Plain-English privacy</title>
+  <link rel="icon" href="/public/logo/favicon-32.png" sizes="32x32" />
+  <style>
+    :root {
+      --primary:#2563EB; --primary-dark:#1E40AF; --accent:#F59E0B;
+      --bg:#F8FAFC; --text:#0B1220; --muted:#64748B;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; line-height:1.55}
+    header{background:#fff;border-bottom:1px solid #eaeaea;position:sticky;top:0;z-index:10}
+    .wrap{max-width:1000px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;justify-content:space-between}
+    .logo{display:flex;align-items:center;gap:10px}
+    .logo span{font-weight:800}
+    .btn{display:inline-block;background:var(--primary);color:#fff;padding:10px 14px;border-radius:10px;text-decoration:none}
+    .btn.ghost{background:transparent;border:1px solid var(--primary);color:var(--primary)}
+    .hero{padding:48px 16px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:center;max-width:1000px;margin:0 auto}
+    h1{font-weight:800;font-size:40px;margin:0 0 8px}
+    p.hint{color:var(--muted);font-size:14px}
+    .card{background:#fff;border:1px solid #eaeaea;border-radius:16px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,0.06)}
+    .badge{display:inline-block;background:var(--accent);color:#111;padding:4px 8px;border-radius:999px;font-weight:700;margin-bottom:8px}
+    .backend{display:flex;gap:8px;margin-top:12px}
+    .backend input{flex:1;padding:10px;border:1px solid #e1e1e1;border-radius:8px}
+    .backend button{padding:10px 12px;border:none;border-radius:8px;background:var(--primary-dark);color:#fff}
+    footer{padding:24px 0;border-top:1px solid #eaeaea;background:#fff;margin-top:24px;text-align:center;color:var(--muted);font-size:14px}
+    @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="logo">
+        <img src="/public/logo/logo_policy_prism.svg" alt="Policy Prism" height="36" />
+        <span>Policy Prism</span>
+      </div>
+      <nav>
+        <a class="btn" id="openDashboard" href="/dashboard">Open Dashboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="grid">
+      <div>
+        <h1>Understand any privacy policy in minutes.</h1>
+        <p>Policy Prism explains what data is collected, how it's used, who it’s shared with, and what you can do—no legalese required.</p>
+        <p class="hint">You’re all set — the Dashboard link goes to your built-in app.</p>
+        <div class="backend">
+          <input id="backend" placeholder="Your backend URL (optional)" />
+          <button id="saveBackend">Save</button>
+        </div>
+        <p class="hint">Tip: Enter your deployed URL here to update the button links automatically.</p>
+      </div>
+      <div>
+        <div class="card">
+          <div class="badge">Risk 72 / 100</div>
+          <h3>Summary</h3>
+          <p>This service collects identifiers, device data, and usage analytics. Data may be shared with advertising and analytics partners. Users can request deletion and opt out of sale/sharing via the settings page.</p>
+          <ul>
+            <li>Uses cookies, trackers, and location (if allowed)</li>
+            <li>Shares info with third parties for ads/analytics</li>
+            <li>Offers deletion & access rights</li>
+          </ul>
+          <a class="btn">Export PDF</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>© Policy Prism · Plain‑English privacy.</footer>
+
+  <script>
+    // Optional: store your deployed URL so the button links point to it
+    const input = document.getElementById('backend');
+    const btn = document.getElementById('saveBackend');
+    const link = document.getElementById('openDashboard');
+    const saved = localStorage.getItem('pp_backend');
+    if (saved) { input.value = saved; link.href = saved + '/dashboard'; }
+    btn.addEventListener('click', () => {
+      const v = input.value.trim();
+      if (!v) return;
+      localStorage.setItem('pp_backend', v);
+      link.href = v + '/dashboard';
+      alert('Saved! The button now points to your backend.');
+    });
+  </script>
+</body>
+</html>
