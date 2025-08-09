@@ -1,0 +1,25 @@
+version: "3.9"
+services:
+  app:
+    build: ./server
+    container_name: policy-translator-pro
+    ports:
+      - "8788:8788"
+    environment:
+      - NODE_ENV=production
+      - PORT=8788
+      # Optional keys (uncomment & set)
+      # - OPENAI_API_KEY=
+      # - HIBP_API_KEY=
+      # - SMTP_HOST=
+      # - SMTP_USER=
+      # - SMTP_PASS=
+      # - EMAIL_FROM=
+      # - JWT_SECRET=change_me_in_prod
+    volumes:
+      - ./server/data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8788/dashboard"]
+      interval: 30s
+      timeout: 5s
+      retries: 5

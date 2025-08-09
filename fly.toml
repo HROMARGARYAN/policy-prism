@@ -1,0 +1,31 @@
+# fly.toml app configuration file
+app = "policy-translator-pro"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8788"
+
+[[services]]
+  internal_port = 8788
+  protocol = "tcp"
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+  [services.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 40
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
