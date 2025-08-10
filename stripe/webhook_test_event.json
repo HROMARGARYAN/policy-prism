@@ -1,0 +1,12 @@
+{
+  "id": "evt_test_checkout_complete",
+  "object": "event",
+  "type": "checkout.session.completed",
+  "data": {
+    "object": {
+      "customer_details": {
+        "email": "test@example.com"
+      }
+    }
+  }
+}
