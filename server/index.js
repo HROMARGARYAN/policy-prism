@@ -1,4 +1,3 @@
-
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -8,33 +7,37 @@ import { nanoid } from 'nanoid';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import nodemailer from 'nodemailer';
+import puppeteer from 'puppeteer';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 
+// __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// App
 const PORT = process.env.PORT || 8788;
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
-/* LANDING_STATIC */
-import path from 'path';
-import { fileURLToPath } from 'url';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+
+// Static: landing + dashboard assets
 app.use('/public', express.static(path.join(__dirname, 'public')));
+app.use('/dashboard', express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public_site', 'index.html'));
 });
 
-app.use('/dashboard', express.static(path.join(__dirname, 'public')));
-
+// Simple file “DB”
 const DB_PATH = path.join(__dirname, 'data', 'db.json');
 function loadDb() {
   try { return JSON.parse(fs.readFileSync(DB_PATH, 'utf-8')); }
-  catch { return { analyses: [], watchlist_emails: [] }; }
+  catch { return { users: [], analyses: [], watchlist_emails: [] }; }
 }
 function saveDb(db) { fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2)); }
 
+// ---------- Analysis helpers ----------
 const AnalyzeReq = z.object({ url: z.string().url().optional(), text: z.string().min(50) });
 
 function heuristicRiskScore(text) {
@@ -47,7 +50,7 @@ function heuristicRiskScore(text) {
     { kw: 'affiliate', w: 4 }, { kw: 'advertis', w: 8 }
   ];
   let score = 0;
-  for (const {kw, w} of weights) {
+  for (const { kw, w } of weights) {
     const count = (t.match(new RegExp(kw, 'g')) || []).length;
     score += Math.min(count, 3) * w;
   }
@@ -62,7 +65,7 @@ function extractCitations(text) {
   const sentences = sentenceSplit(text);
   const keys = ['sell', 'share', 'third party', 'retain', 'indefinite', 'children', 'location', 'advertis', 'ai model', 'train', 'tracking'];
   const cites = [];
-  for (let i=0;i<sentences.length;i++) {
+  for (let i = 0; i < sentences.length; i++) {
     const s = sentences[i];
     const ls = s.toLowerCase();
     if (keys.some(k => ls.includes(k))) {
@@ -106,11 +109,12 @@ async function llmAnalysis(text) {
     const content = data.choices?.[0]?.message?.content || '';
     const start = content.indexOf('{');
     const end = content.lastIndexOf('}');
-    if (start >= 0 && end > start) return JSON.parse(content.slice(start, end+1));
+    if (start >= 0 && end > start) return JSON.parse(content.slice(start, end + 1));
   } catch (e) { console.error('LLM analysis failed:', e.message); }
   return null;
 }
 
+// ---------- Public analyze endpoint ----------
 app.post('/analyze', async (req, res) => {
   try {
     const parsed = AnalyzeReq.safeParse(req.body);
@@ -121,7 +125,6 @@ app.post('/analyze', async (req, res) => {
     const citations = extractCitations(text);
     const actions = recommendedActions(text);
     const llm = await llmAnalysis(text);
-
     const summary = llm?.summary || 'This policy describes data collected, uses (service, analytics, ads), possible sharing with partners/third parties, and user rights (access, deletion, opt-out). Review the highlighted lines and consider the recommended actions.';
 
     res.json({ url, risk_score: risk, summary, citations, highlights: llm?.bullets || citations.map(c => c.text), actions });
@@ -131,65 +134,7 @@ app.post('/analyze', async (req, res) => {
   }
 });
 
-// Save/list/delete analyses
-app.post('/save', (req, res) => {
-  const body = req.body || {};
-  const db = loadDb();
-  const item = {
-    id: nanoid(10),
-    url: body.url,
-    summary: body.summary,
-    risk_score: body.risk_score,
-    highlights: body.highlights || [],
-    citations: body.citations || [],
-    actions: body.actions || [],
-    created_at: new Date().toISOString()
-  };
-  db.analyses.unshift(item);
-  saveDb(db);
-  res.json({ ok: true, id: item.id });
-});
-
-app.get('/list', (req, res) => {
-  const db = loadDb();
-  res.json({ items: db.analyses });
-});
-
-app.delete('/delete/:id', (req, res) => {
-  const db = loadDb();
-  const id = req.params.id;
-  db.analyses = db.analyses.filter(a => a.id !== id);
-  saveDb(db);
-  res.json({ ok: true });
-});
-
-// Re-check a saved URL (fetch content & re-analyze)
-app.post('/recheck/:id', async (req, res) => {
-  const db = loadDb();
-  const item = db.analyses.find(a => a.id === req.params.id);
-  if (!item || !item.url) return res.status(404).json({ error: 'Not found' });
-  try {
-    const r = await fetch(item.url, { method: 'GET' });
-    const html = await r.text();
-    const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
-                     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
-                     .replace(/<[^>]+>/g, ' ')
-                     .replace(/\s+/g, ' ');
-    const risk = heuristicRiskScore(text);
-    const citations = extractCitations(text);
-    const actions = recommendedActions(text);
-    const llm = await llmAnalysis(text);
-    const summary = llm?.summary || item.summary;
-    Object.assign(item, { summary, risk_score: risk, citations, highlights: llm?.bullets || citations.map(c => c.text), updated_at: new Date().toISOString() });
-    saveDb(db);
-    res.json({ ok: true, item });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Fetch failed' });
-  }
-});
-
-// Breach watch (stub + HIBP if key provided)
+// ---------- Breach watch (HIBP) ----------
 app.post('/breach/add', (req, res) => {
   const email = (req.body?.email || '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email' });
@@ -222,12 +167,7 @@ app.get('/breach/check', async (req, res) => {
   res.json({ results: out });
 });
 
-
-/* PRO_V2_ADDED */
-import nodemailer from 'nodemailer';
-import puppeteer from 'puppeteer';
-
-// Simple mailer (optional: used for future alerts)
+// ---------- Reports (HTML + PDF) ----------
 function getMailer() {
   const { SMTP_HOST, SMTP_USER, SMTP_PASS, EMAIL_FROM } = process.env;
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !EMAIL_FROM) return null;
@@ -238,7 +178,6 @@ function getMailer() {
   return { transporter, from: EMAIL_FROM };
 }
 
-// Render HTML report for a saved analysis
 app.get('/report/:id', (req, res) => {
   const db = loadDb();
   const item = db.analyses.find(a => a.id === req.params.id);
@@ -268,7 +207,6 @@ app.get('/report/:id', (req, res) => {
   res.send(html);
 });
 
-// PDF export using Puppeteer (optional: requires dependency)
 app.get('/report/:id.pdf', async (req, res) => {
   try {
     const url = `${req.protocol}://${req.get('host')}/report/${req.params.id}`;
@@ -286,39 +224,7 @@ app.get('/report/:id.pdf', async (req, res) => {
   }
 });
 
-// Background change monitor (every 6 hours) — rechecks all items with URLs
-async function backgroundRecheckAll() {
-  const db = loadDb();
-  for (const it of db.analyses) {
-    if (!it.url) continue;
-    try {
-      const r = await fetch(it.url, { method: 'GET' });
-      const html = await r.text();
-      const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
-                       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
-                       .replace(/<[^>]+>/g, ' ')
-                       .replace(/\s+/g, ' ');
-      const newRisk = heuristicRiskScore(text);
-      // naive change detection: risk delta or first 1000 chars hash delta
-      const before = (it.summary || '').slice(0, 1000);
-      const llm = await llmAnalysis(text);
-      const newSummary = llm?.summary || it.summary;
-      const after = (newSummary || '').slice(0, 1000);
-      const changed = newRisk !== it.risk_score || before !== after;
-      if (changed) {
-        const cites = extractCitations(text);
-        Object.assign(it, { risk_score: newRisk, summary: newSummary, citations: cites, highlights: llm?.bullets || cites.map(c=>c.text), updated_at: new Date().toISOString() });
-      }
-    } catch (e) {
-      console.warn('Background recheck failed for', it.url, e.message);
-    }
-  }
-  saveDb(db);
-}
-setInterval(backgroundRecheckAll, 1000 * 60 * 60 * 6); // 6h
-app.get('/monitor/run', async (req, res) => { await backgroundRecheckAll(); res.json({ ok: true }); });
-
-// Provider audit checklists (static JSON for now)
+// ---------- Provider audits ----------
 const PROVIDER_AUDITS = {
   google: [
     { label: 'Review Google Dashboard', link: 'https://myaccount.google.com/' },
@@ -338,20 +244,42 @@ const PROVIDER_AUDITS = {
     { label: 'Two-Factor Authentication', link: 'https://www.instagram.com/accounts/password/change/' }
   ]
 };
-app.get('/audit/providers', (req, res) => res.json({ providers: Object.keys(PROVIDER_AUDITS) }));
+const PROVIDER_AUDITS_EXT = {
+  facebook: [
+    { label: 'Privacy Checkup', link: 'https://www.facebook.com/privacy/checkup' },
+    { label: 'Ad Preferences', link: 'https://www.facebook.com/adpreferences' },
+    { label: 'Off-Facebook Activity', link: 'https://www.facebook.com/off_facebook_activity/' },
+    { label: 'Face Recognition Off', link: 'https://www.facebook.com/settings?tab=face_recognition' },
+    { label: 'Two-Factor Authentication', link: 'https://www.facebook.com/security/2fac/settings/' }
+  ],
+  tiktok: [
+    { label: 'Personalization & Data', link: 'https://www.tiktok.com/setting' },
+    { label: 'Ad Settings', link: 'https://www.tiktok.com/settings/ads' },
+    { label: 'Download Your Data', link: 'https://www.tiktok.com/privacy/setting/download-your-data' },
+    { label: 'Two-Step Verification', link: 'https://www.tiktok.com/setting' }
+  ],
+  x: [
+    { label: 'Privacy & Safety', link: 'https://x.com/settings/privacy_and_safety' },
+    { label: 'Personalization & Data', link: 'https://x.com/settings/your_twitter_data' },
+    { label: 'Two-Factor Authentication', link: 'https://x.com/settings/security' }
+  ],
+  linkedin: [
+    { label: 'Data Privacy', link: 'https://www.linkedin.com/psettings/data-privacy' },
+    { label: 'Advertising data', link: 'https://www.linkedin.com/psettings/advertising' },
+    { label: 'Sign in & security', link: 'https://www.linkedin.com/psettings/' }
+  ]
+};
+
+app.get('/audit/providers', (req, res) => {
+  res.json({ providers: [...Object.keys(PROVIDER_AUDITS), ...Object.keys(PROVIDER_AUDITS_EXT)] });
+});
 app.get('/audit/:provider', (req, res) => {
-  const list = PROVIDER_AUDITS[req.params.provider];
+  const list = PROVIDER_AUDITS[req.params.provider] || PROVIDER_AUDITS_EXT[req.params.provider];
   if (!list) return res.status(404).json({ error: 'Unknown provider' });
   res.json({ provider: req.params.provider, checklist: list });
 });
 
-
-
-/* PRO_V3_ADDED */
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-
-// DB: add users, analyses user-scoped; store ciphertext for analyses
+// ---------- Auth + encrypted saves ----------
 function initUsers(db) { if (!db.users) db.users = []; if (!db.analyses) db.analyses = []; return db; }
 function findUserByEmail(db, email) { return (db.users || []).find(u => u.email.toLowerCase() === email.toLowerCase()); }
 function createToken(user) {
@@ -393,7 +321,6 @@ app.post('/auth/login', (req, res) => {
   res.json({ token, uid: user.id, email: user.email });
 });
 
-// Middleware for auth
 function authMiddleware(req, res, next) {
   const h = req.headers.authorization || '';
   const m = /^Bearer (.+)$/.exec(h);
@@ -404,12 +331,11 @@ function authMiddleware(req, res, next) {
   next();
 }
 
-// Save/list/delete analyses (encrypted payloads)
 const SaveReq = z.object({
   url: z.string().optional(),
-  // Encrypted package fields (base64): cipherText, iv, salt
   enc: z.object({ cipherText: z.string(), iv: z.string(), salt: z.string() })
 });
+
 app.post('/save', authMiddleware, (req, res) => {
   const parsed = SaveReq.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
@@ -441,8 +367,7 @@ app.delete('/delete/:id', authMiddleware, (req, res) => {
   res.json({ ok: true });
 });
 
-// Recheck (server recomputes from URL, but DOES NOT decrypt user data; produces a fresh summary/risk and re-encrypting is client responsibility in a real E2E setup)
-// Here, we just update a server-stored "meta" note to signal change; client can re-save a new encrypted blob.
+// Recheck: server computes fresh meta; client re-saves encrypted if desired
 app.post('/recheck/:id', authMiddleware, async (req, res) => {
   const db = loadDb(); initUsers(db);
   const item = db.analyses.find(a => a.id === req.params.id && a.uid === req.user.uid);
@@ -467,7 +392,7 @@ app.post('/recheck/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// Alerts: email on risk change (opt-in)
+// Alerts: toggle & background monitor with email
 app.post('/alerts/email', authMiddleware, (req, res) => {
   const db = loadDb(); initUsers(db);
   const u = db.users.find(x => x.id === req.user.uid);
@@ -477,6 +402,7 @@ app.post('/alerts/email', authMiddleware, (req, res) => {
   res.json({ ok: true, alerts: u.alerts });
 });
 
+const RISK_DELTA_NOTIFY = 10;
 async function sendEmail(to, subject, html) {
   const m = getMailer();
   if (!m) return false;
@@ -486,8 +412,6 @@ async function sendEmail(to, subject, html) {
   } catch (e) { console.error('Email send failed', e.message); return false; }
 }
 
-// Enhance background monitor to notify opted-in users when a saved item changes materially
-const RISK_DELTA_NOTIFY = 10;
 async function backgroundRecheckAllWithAlerts() {
   const db = loadDb(); initUsers(db);
   const changes = [];
@@ -510,99 +434,25 @@ async function backgroundRecheckAllWithAlerts() {
         it.updated_at = new Date().toISOString();
         changes.push({ uid: it.uid, url: it.url, newRisk, oldRisk, summary: it.meta.summary });
       }
-    } catch (e) { /* ignore per-item errors */ }
+    } catch { /* ignore per-item errors */ }
   }
   saveDb(db);
-  // Notify users with email alerts enabled
   for (const ch of changes) {
     const user = db.users.find(u => u.id === ch.uid);
     if (!user || !user.alerts?.email_enabled) continue;
-    await sendEmail(user.email, 'Policy risk changed', `<p>The policy at <a href="${ch.url}">${ch.url}</a> changed risk from <b>${ch.oldRisk}</b> to <b>${ch.newRisk}</b>.</p><p>${(ch.summary||'')}</p>`);
+    await sendEmail(
+      user.email,
+      'Policy risk changed',
+      `<p>The policy at <a href="${ch.url}">${ch.url}</a> changed risk from <b>${ch.oldRisk}</b> to <b>${ch.newRisk}</b>.</p><p>${(ch.summary||'')}</p>`
+    );
   }
 }
 setInterval(backgroundRecheckAllWithAlerts, 1000 * 60 * 60 * 6);
 app.get('/monitor/run-alerts', async (req, res) => { await backgroundRecheckAllWithAlerts(); res.json({ ok: true }); });
 
-// Expand Provider Audits
-const PROVIDER_AUDITS_EXT = {
-  facebook: [
-    { label: 'Privacy Checkup', link: 'https://www.facebook.com/privacy/checkup' },
-    { label: 'Ad Preferences', link: 'https://www.facebook.com/adpreferences' },
-    { label: 'Off-Facebook Activity', link: 'https://www.facebook.com/off_facebook_activity/' },
-    { label: 'Face Recognition Off', link: 'https://www.facebook.com/settings?tab=face_recognition' },
-    { label: 'Two-Factor Authentication', link: 'https://www.facebook.com/security/2fac/settings/' }
-  ],
-  tiktok: [
-    { label: 'Personalization & Data', link: 'https://www.tiktok.com/setting' },
-    { label: 'Ad Settings', link: 'https://www.tiktok.com/settings/ads' },
-    { label: 'Download Your Data', link: 'https://www.tiktok.com/privacy/setting/download-your-data' },
-    { label: 'Two-Step Verification', link: 'https://www.tiktok.com/setting' }
-  ],
-  x: [
-    { label: 'Privacy & Safety', link: 'https://x.com/settings/privacy_and_safety' },
-    { label: 'Personalization & Data', link: 'https://x.com/settings/your_twitter_data' },
-    { label: 'Two-Factor Authentication', link: 'https://x.com/settings/security' }
-  ],
-  linkedin: [
-    { label: 'Data Privacy', link: 'https://www.linkedin.com/psettings/data-privacy' },
-    { label: 'Advertising data', link: 'https://www.linkedin.com/psettings/advertising' },
-    { label: 'Sign in & security', link: 'https://www.linkedin.com/psettings/' }
-  ]
-};
-app.get('/audit/providers', (req, res) => {
-  const base = ['google','instagram'];
-  const ext = Object.keys(PROVIDER_AUDITS_EXT);
-  res.json({ providers: [...base, ...ext] });
-});
-app.get('/audit/:provider', (req, res) => {
-  const base = PROVIDER_AUDITS || {};
-  const ext = PROVIDER_AUDITS_EXT || {};
-  const list = (base[req.params.provider] || ext[req.params.provider]);
-  if (!list) return res.status(404).json({ error: 'Unknown provider' });
-  res.json({ provider: req.params.provider, checklist: list });
-});
-
-// Data request letter generator
-const LetterReq = z.object({
-  law: z.enum(['ccpa','gdpr']),
-  fullName: z.string().min(1),
-  email: z.string().email(),
-  address: z.string().min(3).optional(),
-  request: z.enum(['access','delete','optout']).default('delete'),
-  company: z.string().min(1)
-});
-app.post('/letters/generate', (req, res) => {
-  const p = LetterReq.safeParse(req.body);
-  if (!p.success) return res.status(400).json({ error: 'Invalid payload' });
-  const { law, fullName, email, address, request, company } = p.data;
-  const date = new Date().toLocaleDateString();
-  const subject = law === 'gdpr' ? 'GDPR Data Request' : 'CCPA/CPRA Data Request';
-  const body = `
-${date}
-
-To: ${company} — Data Protection Officer / Privacy Team
-
-Subject: ${subject} — ${request.upper ? request.upper() : request}
-
-Hello,
-I am ${fullName} (${email}). Under ${law.toUpperCase()}, I am exercising my right to ${request}.
-Please confirm and complete this request within the statutory timeframe.
-${address ? `Postal Address (for identity verification/correspondence): ${address}` : ''}
-
-I request:
-- Confirmation of actions taken and completion timeline.
-- A copy of my data (for access) OR confirmation of deletion/opt-out as applicable.
-- Contact details for any questions.
-
-Thank you,
-${fullName}
-${email}
-`;
-  res.json({ subject, body: body.trim() });
-});
-
-
+// ---------- Start ----------
 app.listen(PORT, () => {
   console.log(`Policy Translator Pro server on http://localhost:${PORT}`);
   console.log(`Dashboard: http://localhost:${PORT}/dashboard`);
 });
+
